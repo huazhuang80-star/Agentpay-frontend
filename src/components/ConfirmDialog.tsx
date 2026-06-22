@@ -1,6 +1,6 @@
 "use client";
 
-import { type ReactNode } from "react";
+import { type KeyboardEvent, type ReactNode, useEffect, useRef } from "react";
 
 type Props = {
   open: boolean;
@@ -21,15 +21,70 @@ export function ConfirmDialog({
   onConfirm,
   onCancel,
 }: Props) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+
+    previousFocusRef.current = document.activeElement as HTMLElement | null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    const focusable = getFocusableElements(dialogRef.current);
+    (focusable[0] ?? dialogRef.current)?.focus();
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      previousFocusRef.current?.focus();
+    };
+  }, [open]);
+
   if (!open) return null;
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "Escape") {
+      event.stopPropagation();
+      onCancel();
+      return;
+    }
+
+    if (event.key !== "Tab") return;
+
+    const focusable = getFocusableElements(dialogRef.current);
+    if (focusable.length === 0) {
+      event.preventDefault();
+      dialogRef.current?.focus();
+      return;
+    }
+
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
+
   return (
     <div
       role="dialog"
       aria-modal="true"
       aria-labelledby="confirm-title"
+      tabIndex={-1}
+      ref={dialogRef}
+      onKeyDown={handleKeyDown}
+      onClick={onCancel}
       className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4"
     >
-      <div className="w-full max-w-sm rounded-lg bg-white p-6 shadow-xl dark:bg-zinc-900">
+      <div
+        className="w-full max-w-sm rounded-lg bg-white p-6 shadow-xl dark:bg-zinc-900"
+        onClick={(event) => event.stopPropagation()}
+      >
         <h2 id="confirm-title" className="text-lg font-semibold">
           {title}
         </h2>
@@ -57,4 +112,21 @@ export function ConfirmDialog({
       </div>
     </div>
   );
+}
+
+function getFocusableElements(root: HTMLElement | null) {
+  if (!root) return [];
+
+  return Array.from(
+    root.querySelectorAll<HTMLElement>(
+      [
+        "a[href]",
+        "button:not([disabled])",
+        "input:not([disabled])",
+        "select:not([disabled])",
+        "textarea:not([disabled])",
+        '[tabindex]:not([tabindex="-1"])',
+      ].join(",")
+    )
+  ).filter((element) => !element.hasAttribute("disabled") && !element.getAttribute("aria-hidden"));
 }
