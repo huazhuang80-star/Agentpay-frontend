@@ -1,4 +1,12 @@
-import { apiDelete, apiFetch, apiGet, apiPatch, apiPost, ApiError } from "../apiClient";
+import {
+  apiDelete,
+  apiFetch,
+  apiGet,
+  apiPatch,
+  apiPost,
+  ApiError,
+  RequestTimeoutError,
+} from "../apiClient";
 import { resolveApiBase } from "../resolveApiBase";
 
 describe("resolveApiBase", () => {
@@ -171,6 +179,7 @@ describe("apiFetch", () => {
 
   afterEach(() => {
     global.fetch = originalFetch;
+    jest.useRealTimers();
   });
 
   function mockFetch(
@@ -184,6 +193,7 @@ describe("apiFetch", () => {
       jest.fn(async (url, init) => {
         expect(url).toMatch(/^http:\/\/localhost:3001\/api\/v1\/things/);
         expect(init?.method).toBeUndefined();
+        expect(init?.signal).toBeInstanceOf(AbortSignal);
         expect((init?.headers as Record<string, string>)["Content-Type"]).toBe(
           "application/json"
         );
@@ -287,5 +297,51 @@ describe("apiFetch", () => {
     const apiErr = caught as unknown as ApiError;
     expect(apiErr.error).toBe("rate_limit");
     expect(apiErr.requestId).toBe("req-42");
+  });
+
+  it("aborts the request and throws a typed timeout error", async () => {
+    jest.useFakeTimers();
+    mockFetch(
+      jest.fn(
+        (_url, init) =>
+          new Promise<Response>((_resolve, reject) => {
+            init?.signal?.addEventListener("abort", () => {
+              reject((init.signal as AbortSignal & { reason?: unknown }).reason);
+            });
+          })
+      )
+    );
+
+    const request = apiFetch("/api/v1/slow", { timeoutMs: 50 });
+    jest.advanceTimersByTime(50);
+
+    await expect(request).rejects.toMatchObject({
+      message: "request timed out",
+      error: "request_timeout",
+      timeoutMs: 50,
+    } satisfies Partial<RequestTimeoutError>);
+  });
+
+  it("propagates a caller-supplied abort signal", async () => {
+    const controller = new AbortController();
+    const callerError = new Error("route changed");
+    mockFetch(
+      jest.fn(
+        (_url, init) =>
+          new Promise<Response>((_resolve, reject) => {
+            init?.signal?.addEventListener("abort", () => {
+              reject((init.signal as AbortSignal & { reason?: unknown }).reason);
+            });
+          })
+      )
+    );
+
+    const request = apiFetch("/api/v1/slow", {
+      signal: controller.signal,
+      timeoutMs: 1_000,
+    });
+    controller.abort(callerError);
+
+    await expect(request).rejects.toBe(callerError);
   });
 });
