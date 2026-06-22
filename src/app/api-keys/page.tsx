@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { apiGet, apiPost, apiDelete } from "@/lib/apiClient";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { CopyButton } from "@/components/CopyButton";
+import { apiDelete, apiGet, apiPost } from "@/lib/apiClient";
 
 type KeyItem = { prefix: string; label: string; createdAt: number };
 
@@ -10,6 +11,7 @@ export default function ApiKeysPage() {
   const [items, setItems] = useState<KeyItem[] | null>(null);
   const [label, setLabel] = useState("");
   const [created, setCreated] = useState<string | null>(null);
+  const [showCreatedKey, setShowCreatedKey] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pendingRevoke, setPendingRevoke] = useState<KeyItem | null>(null);
 
@@ -17,6 +19,7 @@ export default function ApiKeysPage() {
     apiGet<{ items: KeyItem[] }>("/api/v1/api-keys")
       .then((b) => setItems(b.items))
       .catch((e) => setError(e.message));
+
   useEffect(() => {
     load();
   }, []);
@@ -27,6 +30,7 @@ export default function ApiKeysPage() {
     try {
       const res = await apiPost<{ key: string }>("/api/v1/api-keys", { label });
       setCreated(res.key);
+      setShowCreatedKey(false);
       setLabel("");
       await load();
     } catch (err) {
@@ -61,6 +65,7 @@ export default function ApiKeysPage() {
         }}
         onCancel={() => setPendingRevoke(null)}
       />
+
       <h1 className="text-3xl font-semibold tracking-tight">API keys</h1>
       <form onSubmit={onCreate} className="flex gap-2">
         <input
@@ -79,20 +84,25 @@ export default function ApiKeysPage() {
           Create
         </button>
       </form>
+
       {created && (
-        <div
-          role="status"
-          className="rounded border border-emerald-300 bg-emerald-50 p-3 text-sm dark:border-emerald-900 dark:bg-emerald-950"
-        >
-          <p className="font-medium">New key (copy now — shown only once):</p>
-          <code className="break-all">{created}</code>
-        </div>
+        <CreatedKeyPanel
+          apiKey={created}
+          revealed={showCreatedKey}
+          onToggleReveal={() => setShowCreatedKey((current) => !current)}
+          onDismiss={() => {
+            setCreated(null);
+            setShowCreatedKey(false);
+          }}
+        />
       )}
+
       {error && (
         <p role="alert" className="text-sm text-rose-600">
           {error}
         </p>
       )}
+
       {items && (
         <ul className="divide-y divide-zinc-200 dark:divide-zinc-800">
           {items.map((k) => (
@@ -102,7 +112,7 @@ export default function ApiKeysPage() {
             >
               <div>
                 <p className="text-sm font-medium">{k.label}</p>
-                <p className="font-mono text-xs text-zinc-500">{k.prefix}…</p>
+                <p className="font-mono text-xs text-zinc-500">{k.prefix}...</p>
               </div>
               <button
                 type="button"
@@ -116,5 +126,52 @@ export default function ApiKeysPage() {
         </ul>
       )}
     </main>
+  );
+}
+
+function CreatedKeyPanel({
+  apiKey,
+  revealed,
+  onToggleReveal,
+  onDismiss,
+}: {
+  apiKey: string;
+  revealed: boolean;
+  onToggleReveal: () => void;
+  onDismiss: () => void;
+}) {
+  const prefix = apiKey.slice(0, 6);
+  const masked = `${prefix}${"*".repeat(Math.max(apiKey.length - prefix.length, 12))}`;
+
+  return (
+    <div
+      role="status"
+      className="rounded border border-emerald-300 bg-emerald-50 p-3 text-sm dark:border-emerald-900 dark:bg-emerald-950"
+    >
+      <p className="font-medium">New key (copy now - shown only once):</p>
+      <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center">
+        <code className="break-all rounded bg-white/70 px-2 py-1 font-mono text-xs dark:bg-black/20">
+          {revealed ? apiKey : masked}
+        </code>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={onToggleReveal}
+            aria-pressed={revealed}
+            className="rounded border border-zinc-300 px-2 py-0.5 text-xs hover:border-zinc-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 dark:border-zinc-700"
+          >
+            {revealed ? "Hide" : "Reveal"}
+          </button>
+          <CopyButton value={apiKey} label="Copy key" />
+          <button
+            type="button"
+            onClick={onDismiss}
+            className="rounded border border-emerald-600 px-2 py-0.5 text-xs text-emerald-800 hover:bg-emerald-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500 dark:text-emerald-300 dark:hover:bg-emerald-900/40"
+          >
+            Done - I&apos;ve saved it
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
