@@ -10,14 +10,26 @@ type Props = {
 export function Tooltip({ label, children }: Props) {
   const id = useId();
   const [visible, setVisible] = useState(false);
+
+  const show = () => setVisible(true);
+  const hide = () => setVisible(false);
+
   return (
-    <span className="relative inline-flex">
+    <span
+      className="relative inline-flex"
+      onMouseEnter={show}
+      onMouseLeave={hide}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") {
+          event.stopPropagation();
+          hide();
+        }
+      }}
+    >
       <span
         aria-describedby={visible ? id : undefined}
-        onMouseEnter={() => setVisible(true)}
-        onMouseLeave={() => setVisible(false)}
-        onFocus={() => setVisible(true)}
-        onBlur={() => setVisible(false)}
+        onFocus={show}
+        onBlur={hide}
       >
         {children}
       </span>
@@ -25,7 +37,7 @@ export function Tooltip({ label, children }: Props) {
         <span
           role="tooltip"
           id={id}
-          className="pointer-events-none absolute bottom-full left-1/2 mb-1 -translate-x-1/2 whitespace-nowrap rounded bg-black px-2 py-1 text-xs text-white shadow"
+          className="absolute bottom-full left-1/2 mb-1 -translate-x-1/2 whitespace-nowrap rounded bg-black px-2 py-1 text-xs text-white shadow"
         >
           {label}
         </span>
