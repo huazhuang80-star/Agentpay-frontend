@@ -1,15 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { resolveApiBase } from "@/lib/resolveApiBase";
+import { apiGet, apiPost } from "@/lib/apiClient";
 
 type QueryResult = {
   agent: string;
   serviceId: string;
   total: number;
 } | null;
-
-const API_BASE = resolveApiBase();
 
 export default function UsagePage() {
   const [agent, setAgent] = useState("");
@@ -31,16 +29,11 @@ export default function UsagePage() {
       return;
     }
     try {
-      const res = await fetch(`${API_BASE}/api/v1/usage`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ agent, serviceId, requests: requestsNum }),
+      const body = await apiPost<{ total: number }>("/api/v1/usage", {
+        agent,
+        serviceId,
+        requests: requestsNum,
       });
-      const body = await res.json();
-      if (!res.ok) {
-        setStatus({ kind: "error", message: body?.message ?? "request failed" });
-        return;
-      }
       setStatus({ kind: "ok", total: body.total });
     } catch (err) {
       const message = err instanceof Error ? err.message : "network error";
@@ -52,14 +45,9 @@ export default function UsagePage() {
     event.preventDefault();
     setQueryError(null);
     try {
-      const url = `${API_BASE}/api/v1/usage/${encodeURIComponent(queryAgent)}/${encodeURIComponent(queryService)}`;
-      const res = await fetch(url);
-      const body = await res.json();
-      if (!res.ok) {
-        setQueryError(body?.message ?? "query failed");
-        setQueryResult(null);
-        return;
-      }
+      const body = await apiGet<QueryResult>(
+        `/api/v1/usage/${encodeURIComponent(queryAgent)}/${encodeURIComponent(queryService)}`
+      );
       setQueryResult(body);
     } catch (err) {
       const message = err instanceof Error ? err.message : "network error";
